@@ -1,8 +1,5 @@
 import torch
 import torch.nn as nn
-
-import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 class MultiHeadAttention(nn.Module):
@@ -71,7 +68,7 @@ class MultiHeadAttention(nn.Module):
         k = self.k(k).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v(v).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        score = (q @ k.transpose(-2, -1)) * (self.head_dim ** -0.5)
+        score = (q @ k.transpose(-2, -1)) / (self.head_dim ** 0.5)
         if mask is not None:
             score = torch.masked_fill(score, mask, float('-inf'))
         attn_weights = score.softmax(dim=-1)
