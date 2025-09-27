@@ -85,7 +85,6 @@ if __name__ == "__main__":
 
     # 测试每个激活函数
     leaky_relu = LeakyReLU(negative_slope=0.01)
-    gelu = GELU()
     silu = SiLU(beta=1.0, learnable_beta=True)
     swiglu = SwiGLU(input_dim=128, output_dim=256, beta=1.0, learnable_beta=True)
 
