@@ -1,3 +1,4 @@
+import scipy
 import torch
 import numpy as np
 
@@ -75,3 +76,66 @@ def calculate_iou(bbox1, bbox2):
     union = area1[:, None] + area2 - inter
     
     return inter / union
+
+def nms(boxes, scores, iou_threshold):
+    indices = scores.argsort()[::-1]
+    keep = []
+    
+    while len(indices) > 0:
+        current = indices[0]
+        keep.append(current)
+        if len(indices) == 1:
+            break
+        rest_indices = indices[1:]
+        
+        ious = np.array([IoU(boxes[current], boxes[i]) for i in rest_indices])
+        indices = rest_indices[ious <= iou_threshold]
+    
+    return keep
+
+def bbox_iou(box1, box2):
+    # Get the coordinates of bounding boxes
+    x1_min, y1_min, x1_max, y1_max = box1
+    x2_min, y2_min, x2_max, y2_max = box2
+
+    # Calculate the (x, y) coordinates of the intersection rectangle
+    inter_x_min = max(x1_min, x2_min)
+    inter_y_min = max(y1_min, y2_min)
+    inter_x_max = min(x1_max, x2_max)
+    inter_y_max = min(y1_max, y2_max)
+
+    # Compute the area of intersection rectangle
+    inter_area = max(0, inter_x_max - inter_x_min) * max(0, inter_y_max - inter_y_min)
+
+    # Compute the area of both bounding boxes
+    box1_area = (x1_max - x1_min) * (y1_max - y1_min)
+    box2_area = (x2_max - x2_min) * (y2_max - y2_min)
+
+    # Compute the Intersection over Union (IoU)
+    iou = inter_area / float(box1_area + box2_area - inter_area)
+
+    return iou
+
+def calculate_fid(act1, act2):
+    # calculate mean and covariance statistics
+    mu1, sigma1 = act1.mean(axis=0), np.cov(act1, rowvar=False)
+    mu2, sigma2 = act2.mean(axis=0), np.cov(act2, rowvar=False)
+    # calculate sum squared difference between means
+    ssdiff = np.sum((mu1 - mu2)*2.0)
+    # calculate sqrt of product between cov
+    covmean = scipy.linalg.sqrtm(sigma1.dot(sigma2))
+    # check and correct imaginary numbers from sqrt
+    if np.iscomplexobj(covmean):
+        covmean = covmean.real
+    # calculate score
+    fid = ssdiff + np.trace(sigma1 + sigma2 - 2.0 * covmean)
+    return fid
+
+act1 = np.random(102048)
+act1 = act1.reshape((10,2048))
+act2 = np.random(102048)
+act2 = act2.reshape((10,2048))
+fid = calculate_fid(act1, act1)
+print('FID (same): %.3f' % fid)
+fid = calculate_fid(act1, act2)
+print('FID (different): %.3f' % fid)

@@ -69,3 +69,7 @@ if __name__ == "__main__":
     final_layer = FinalLayer(hidden_size, patch_size, out_channels)
     out_final = final_layer(out_block, c)
     print("FinalLayer 输出 shape:", out_final.shape)  # [B, N, patch_size * patch_size * out_channels]
+
+def classifier_free_guidance(x_cond, x_uncond, guidance_scale):
+    return x_uncond + guidance_scale * (x_cond - x_uncond)
+

@@ -31,12 +31,12 @@ class MultiHeadAttention(nn.Module):
         Bc, Nc, Cc = cond.shape
         assert B == Bc and C == Cc
 
-        bias = None if self.qkv.bias is None else self.qkv.bias[:self.emb_size]
-        q = F.linear(x, self.qkv.weight[:self.emb_size, :], bias)
+        q_bias = None if self.qkv.bias is None else self.qkv.bias[:self.emb_size]
+        q = F.linear(x, self.qkv.weight[:self.emb_size, :], q_bias)
         q = q.view(B, N, self.num_heads, self.head_dim)
 
-        bias = None if self.qkv.bias is None else self.qkv.bias[self.emb_size:]
-        kv = F.linear(cond, self.qkv.weight[self.emb_size:, :], bias)
+        kv_bias = None if self.qkv.bias is None else self.qkv.bias[self.emb_size:]
+        kv = F.linear(cond, self.qkv.weight[self.emb_size:, :], kv_bias)
         kv = kv.view(B, Nc, 2, self.num_heads, self.head_dim)
 
         k, v = kv.unbind(2)
@@ -54,7 +54,7 @@ class MultiHeadAttention(nn.Module):
             q = q * self.scale
             score = (q @ k.transpose(-2, -1))
             if casual_masked:
-                mask = torch.triu(torch.ones(N, N), diagonal=1).to(x.device).bool()
+                mask = torch.triu(torch.ones_like(score), diagonal=1).to(x.device).bool()
                 score = torch.masked_fill(score, mask, float('-inf'))
             attn = score.softmax(dim=-1)
             attn = attn @ v
@@ -73,7 +73,7 @@ class MultiHeadAttention(nn.Module):
             score = torch.masked_fill(score, mask, float('-inf'))
         attn_weights = score.softmax(dim=-1)
 
-        attn_output = (attn_weights @ v).transpose(1, 2).reshape(batch_size, -1, self.emb_dim)
+        attn_output = (attn_weights @ v).transpose(1, 2).reshape(batch_size, -1, self.emb_size)
         return self.out_proj(attn_output)
 
 
@@ -127,7 +127,7 @@ class GroupQueryAttention(nn.Module):
 
 if __name__ == "__main__":
     x = torch.rand(2, 10, 32)  # (batch_size, seq_len, emb_size)
+    cond = torch.rand(2, 10, 32)  # Conditioning input
     net = MultiHeadAttention(32, 4)
-    output = net(x)
-
+    output = net(x, cond=cond)
     print(output.shape)  # Should be (2, 10, 32)
