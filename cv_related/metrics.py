@@ -46,75 +46,88 @@ def lpips(predictions, targets):
     lpips_value = torch.nn.functional.mse_loss(predictions, targets)
     return lpips_value.item()
 
-def IoU(boxA,boxB):#x1,y1,x2,y2
-    xA=max(boxA[0],boxB[0])
-    yA=max(boxA[1],boxB[1])
-    xB=min(boxA[2],boxB[2])
-    yB=min(boxA[3],boxB[3])
-    interArea=max(0,xB-xA+1)*max(0,yB-yA+1)
-    boxAArea=(boxA[2]-boxA[0]+1)*(boxA[3]-boxA[1]+1)
-    boxBArea=(boxB[2]-boxB[0]+1)*(boxB[3]-boxB[1]+1)
-    iou=interArea/(boxAArea+boxBArea-interArea)
+
+def iou(a, b):
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    
+    # 计算每个框的面积
+    # 如果点坐标是像素值，这个边是要+1的，e.g. (ax2 - ax1 + 1)，四个括号都要
+    # 在一般的现代目标检测中，使用浮点坐标系统，亚像素精度，所以直接是几何面积。
+    area_a = (ax2 - ax1) * (ay2 - ay1)
+    area_b = (bx2 - bx1) * (by2 - by1)
+    
+    iou_x1 = np.maximum(ax1, bx1)
+    iou_y1 = np.maximum(ay1, by1)
+    iou_x2 = np.minimum(ax2, bx2)
+    iou_y2 = np.minimum(ay2, by2)
+    
+    iou_w = iou_x2 - iou_x1
+    iou_h = iou_y2 - iou_y1
+    area_iou = iou_w * iou_h
+    iou = area_iou / (area_a + area_b - area_iou)
     return iou
-#
-def calculate_iou(bbox1, bbox2):
-    # 计算bbox的面积
-    area1 = (bbox1[:, 2] - bbox1[:, 0]) * (bbox1[:, 3] - bbox1[:, 1])
-    area2 = (bbox2[:, 2] - bbox2[:, 0]) * (bbox2[:, 3] - bbox2[:, 1])
-    # 换一种更高级的方式计算面积
-    # area2 = np.prod(bbox2[:, 2:] - bbox2[:, :2], axis=1)
     
-    # 计算交集的左上角坐标和右下角坐标
-    lt = np.maximum(bbox1[:, None, :2], bbox2[:, :2]) # [m, n, 2]
-    rb = np.minimum(bbox1[:, None, 2:], bbox2[:, 2:])
     
-    # 计算交集面积
-    wh = np.clip(rb - lt, a_min=0, a_max=None)
-    inter = wh[:,:,0] * wh[:,:,1]
+def batch_iou(boxes1, boxes2):
+    boxes1 = np.array(boxes1) # shape (N, 4), format [x1, y1, x2, y2]
+    boxes2 = np.array(boxes2) # shape (M, 4), format [x1, y1, x2, y2]
     
-    # 计算并集面积
-    union = area1[:, None] + area2 - inter
+    # 计算每个框的面积
+    area1 = (boxes1[:, 2] - boxes1[:, 0]) * (boxes1[:, 3] - boxes1[:, 1])  # (N,)
+    area2 = (boxes2[:, 2] - boxes2[:, 0]) * (boxes2[:, 3] - boxes2[:, 1])  # (M,)
     
-    return inter / union
+    # 扩展维度以支持广播: boxes1 (N,1,4), boxes2 (1,M,4)
+    boxes1_expanded = boxes1[:, None, :]  # (N, 1, 4)
+    boxes2_expanded = boxes2[None, :, :]  # (1, M, 4)
+
+    lt = np.maximum(boxes1_expanded[..., :2], boxes2_expanded[..., :2])  # (N, M, 2)
+    rb = np.minimum(boxes1_expanded[..., 2:], boxes2_expanded[..., 2:])  # (N, M, 2)
+    
+    # 计算交集的宽高，如果为负则置为0
+    wh = np.clip(rb - lt, a_min=0, a_max=None)  # (N, M, 2)
+    intersection = wh[..., 0] * wh[..., 1]  # (N, M)
+    
+    # 使用广播：area1 (N,1) + area2 (1,M) - intersection (N,M)
+    union = area1[:, None] + area2[None, :] - intersection  # (N, M)
+    
+    # 计算IoU，避免除零
+    # shape (N, M), iou_matrix[i,j] = IoU(boxes1[i], boxes2[j])
+    iou = intersection / np.maximum(union, 1e-8)
+    
+    return iou
+
 
 def nms(boxes, scores, iou_threshold):
-    indices = scores.argsort()[::-1]
+    x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    
+    areas = (x2 - x1) * (y2 - y1)
+    order = scores.argsort()[::-1]
+    
     keep = []
     
-    while len(indices) > 0:
-        current = indices[0]
-        keep.append(current)
-        if len(indices) == 1:
-            break
-        rest_indices = indices[1:]
+    while order.size > 0:
+        i = order[0]
+        keep.append(i)
         
-        ious = np.array([IoU(boxes[current], boxes[i]) for i in rest_indices])
-        indices = rest_indices[ious <= iou_threshold]
-    
+        if order.size == 1: break
+        
+        xx1 = np.maximum(x1[i], x1[order[1:]])
+        yy1 = np.maximum(y1[i], y1[order[1:]])
+        xx2 = np.minimum(x2[i], x2[order[1:]])
+        yy2 = np.minimum(y2[i], y2[order[1:]])
+        
+        w = np.maximum(0.0, xx2 - xx1)
+        h = np.maximum(0.0, yy2 - yy1)
+        inter = w * h
+        iou = inter / (areas[i] + areas[order[1:]] - inter)
+        
+        inds = np.where(iou <= iou_threshold)[0]
+        
+        order = order[inds + 1]
+        
     return keep
 
-def bbox_iou(box1, box2):
-    # Get the coordinates of bounding boxes
-    x1_min, y1_min, x1_max, y1_max = box1
-    x2_min, y2_min, x2_max, y2_max = box2
-
-    # Calculate the (x, y) coordinates of the intersection rectangle
-    inter_x_min = max(x1_min, x2_min)
-    inter_y_min = max(y1_min, y2_min)
-    inter_x_max = min(x1_max, x2_max)
-    inter_y_max = min(y1_max, y2_max)
-
-    # Compute the area of intersection rectangle
-    inter_area = max(0, inter_x_max - inter_x_min) * max(0, inter_y_max - inter_y_min)
-
-    # Compute the area of both bounding boxes
-    box1_area = (x1_max - x1_min) * (y1_max - y1_min)
-    box2_area = (x2_max - x2_min) * (y2_max - y2_min)
-
-    # Compute the Intersection over Union (IoU)
-    iou = inter_area / float(box1_area + box2_area - inter_area)
-
-    return iou
 
 def calculate_fid(act1, act2):
     # calculate mean and covariance statistics
@@ -131,11 +144,3 @@ def calculate_fid(act1, act2):
     fid = ssdiff + np.trace(sigma1 + sigma2 - 2.0 * covmean)
     return fid
 
-act1 = np.random(102048)
-act1 = act1.reshape((10,2048))
-act2 = np.random(102048)
-act2 = act2.reshape((10,2048))
-fid = calculate_fid(act1, act1)
-print('FID (same): %.3f' % fid)
-fid = calculate_fid(act1, act2)
-print('FID (different): %.3f' % fid)

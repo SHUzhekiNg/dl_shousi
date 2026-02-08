@@ -53,7 +53,7 @@ class BatchNorm2d(nn.Module):
         return self.gamma.view(1, -1, 1, 1) * x + self.beta.view(1, -1, 1, 1)
 
 class LayerNorm(nn.Module):
-    def __init__(self,d_model, eps = 1e-6):
+    def __init__(self, d_model, eps=1e-6):
         super().__init__()
         self.eps = eps
         self.gamma = nn.Parameter(torch.ones(d_model))
@@ -61,19 +61,20 @@ class LayerNorm(nn.Module):
 
     def forward(self, x: torch.Tensor):
         mean = x.mean(dim=-1, keepdim=True)
-        std = x.std(dim=-1, keepdim=True)
-        x = (x - mean) / (std + self.eps)
-        return self.gamma * x + self.beta
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        x = (x - mean) / torch.sqrt(var + self.eps)
+        return x * self.gamma + self.beta
 
 class RMSNorm(nn.Module):
-    def __init__(self, d_model, eps = 1e-6):
+    def __init__(self, d_model, eps=1e-6):
         super().__init__()
         self.eps = eps
         self.gamma = nn.Parameter(torch.ones(d_model))
 
-    def forward(self, x: torch.Tensor):
-        norm = x.norm(2, dim=-1, keepdim=True)
-        return x / (norm + self.eps) * self.gamma
+    def forward(self, x):
+        # Reciprocal Square Root（平方根倒数）
+        rms = torch.rsqrt(torch.mean(x**2, dim=-1, keepdim=True) + self.eps)
+        return x * rms * self.gamma
 
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -108,3 +109,18 @@ class GroupNorm(nn.Module):
         x = (x - mean) / torch.sqrt(var + self.eps)
         x = x.view(B, C, H, W)
         return x * self.gamma + self.beta
+    
+class InstanceNorm2d(nn.Module):
+    def __init__(self, num_channels, eps=1e-5):
+        super(InstanceNorm2d, self).__init__()
+        self.gamma = nn.Parameter(torch.ones(num_channels))
+        self.beta = nn.Parameter(torch.zeros(num_channels))
+        self.eps = eps
+
+    def forward(self, x:torch.Tensor):
+        # x shape: (N, C, H, W)
+        mean = x.mean(dim=(2, 3), keepdim=True)
+        var = x.var(dim=(2, 3), keepdim=True, unbiased=True)
+
+        x = (x - mean) / torch.sqrt(var + self.eps)
+        return self.gamma.view(1, -1, 1, 1) * x + self.beta.view(1, -1, 1, 1)
