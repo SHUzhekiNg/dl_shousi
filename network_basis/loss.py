@@ -95,3 +95,24 @@ def grpo_loss(old_policy_logprobs_group, new_policy_logprobs_group, group_advant
         group_loss += (policy_loss + kl_penalty)  # 累加组内每个响应的损失
 
     return group_loss / len(group_advantages)  # 对组内损失取平均
+
+
+def contrastive_loss(x1, x2, label, margin=1.0):
+    dist = torch.sqrt(torch.sum((x1 - x2) ** 2, dim=-1) + 1e-8)
+    loss = label * dist ** 2 + (1 - label) * torch.clamp(margin - dist, min=0) ** 2
+    return loss.mean()
+
+
+def triplet_loss(anchor, positive, negative, margin=1.0):
+    dist_pos = torch.sqrt(torch.sum((anchor - positive) ** 2, dim=-1) + 1e-8)
+    dist_neg = torch.sqrt(torch.sum((anchor - negative) ** 2, dim=-1) + 1e-8)
+    loss = torch.clamp(dist_pos - dist_neg + margin, min=0)
+    return loss.mean()
+
+
+def infonce_loss(query, keys, temperature=0.07):
+    query = F.normalize(query, dim=-1)
+    keys = F.normalize(keys, dim=-1)
+    logits = query @ keys.T / temperature
+    labels = torch.arange(query.shape[0], device=query.device)
+    return F.cross_entropy(logits, labels)
