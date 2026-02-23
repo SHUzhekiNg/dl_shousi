@@ -1,9 +1,8 @@
-import torch
-import torch.nn as nn
+import numpy as np
 
-X = torch.tensor([[1.0, 1.0], [1.5, 2.0], [3.0, 4.0], [5.0, 7.0], [3.5, 5.0],
-                  [4.5, 5.0], [3.5, 4.5], [2.0, 2.5], [2.5, 3.0], [1.0, 2.0]], dtype=torch.float32)
-y = torch.tensor([0, 0, 1, 1, 1, 1, 1, 0, 0, 0], dtype=torch.long)
+X = np.array([[1.0, 1.0], [1.5, 2.0], [3.0, 4.0], [5.0, 7.0], [3.5, 5.0],
+              [4.5, 5.0], [3.5, 4.5], [2.0, 2.5], [2.5, 3.0], [1.0, 2.0]], dtype=np.float32)
+y = np.array([0, 0, 1, 1, 1, 1, 1, 0, 0, 0], dtype=np.int64)
 
 class KNN:
     def __init__(self, k=3):
@@ -17,18 +16,20 @@ class KNN:
 
     def euclidean_distance(self, x1, x2):
         # 计算欧几里得距离
-        return torch.sqrt(torch.sum((x1 - x2) ** 2))
+        return np.sqrt(np.sum((x1 - x2) ** 2))
 
     def predict_single(self, x):
         # 预测单个样本
-        distances = torch.tensor([self.euclidean_distance(x, x_train) for x_train in self.X_train])
-        _, indices = torch.topk(distances, self.k, largest=False)  # 找到 k 个最近邻
+        distances = np.array([self.euclidean_distance(x, x_train) for x_train in self.X_train])
+        indices = np.argsort(distances)[:self.k]  # 找到 k 个最近邻
         k_nearest_labels = self.y_train[indices]
-        return torch.mode(k_nearest_labels)[0].item()
+        # 计算众数
+        values, counts = np.unique(k_nearest_labels, return_counts=True)
+        return values[np.argmax(counts)]
 
     def predict(self, X):
         # 预测多个样本
-        return torch.tensor([self.predict_single(x) for x in X], dtype=torch.long)
+        return np.array([self.predict_single(x) for x in X], dtype=np.int64)
 
 
 
@@ -38,9 +39,9 @@ if __name__ == "__main__":
     knn.fit(X, y)
     knn_predictions = knn.predict(X)
     print("kNN Predictions:", knn_predictions)
-    print("kNN Accuracy:", torch.mean((knn_predictions == y).float()).item())
+    print("kNN Accuracy:", np.mean(knn_predictions == y))
 
 
-    test_sample = torch.tensor([[2.0, 3.0]], dtype=torch.float32)
+    test_sample = np.array([[2.0, 3.0]], dtype=np.float32)
     knn_test_pred = knn.predict_single(test_sample[0])
     print(f"kNN Prediction: {knn_test_pred}")

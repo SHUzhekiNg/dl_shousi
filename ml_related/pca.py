@@ -1,4 +1,4 @@
-import torch
+import numpy as np
 
 
 class PCA:
@@ -8,11 +8,11 @@ class PCA:
         self.mean = None
 
     def fit(self, X):
-        self.mean = X.mean(dim=0)
+        self.mean = X.mean(axis=0)
         X_centered = X - self.mean
         cov = (X_centered.T @ X_centered) / (X.shape[0] - 1)
-        eigenvalues, eigenvectors = torch.linalg.eigh(cov)
-        idx = torch.argsort(eigenvalues, descending=True)
+        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+        idx = np.argsort(eigenvalues)[::-1]
         self.components = eigenvectors[:, idx[:self.n_components]]
         self.explained_variance = eigenvalues[idx[:self.n_components]]
 
@@ -25,8 +25,8 @@ class PCA:
 
 
 if __name__ == "__main__":
-    torch.manual_seed(42)
-    X = torch.randn(100, 5)
+    np.random.seed(42)
+    X = np.random.randn(100, 5)
     pca = PCA(n_components=2)
     pca.fit(X)
     Z = pca.transform(X)
@@ -34,4 +34,4 @@ if __name__ == "__main__":
     print("Original shape:", X.shape)
     print("Transformed shape:", Z.shape)
     print("Explained variance:", pca.explained_variance)
-    print("Reconstruction error:", torch.mean((X - X_reconstructed) ** 2).item())
+    print("Reconstruction error:", np.mean((X - X_reconstructed) ** 2))

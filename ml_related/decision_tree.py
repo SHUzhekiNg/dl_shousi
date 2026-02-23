@@ -1,10 +1,9 @@
-import torch
 import numpy as np
 
 # 构造小型数据集
-X = torch.tensor([[1.0, 1.0], [1.5, 2.0], [3.0, 4.0], [5.0, 7.0], [3.5, 5.0],
-                  [4.5, 5.0], [3.5, 4.5], [2.0, 2.5], [2.5, 3.0], [1.0, 2.0]], dtype=torch.float32)
-y = torch.tensor([0, 0, 1, 1, 1, 1, 1, 0, 0, 0], dtype=torch.long)
+X = np.array([[1.0, 1.0], [1.5, 2.0], [3.0, 4.0], [5.0, 7.0], [3.5, 5.0],
+              [4.5, 5.0], [3.5, 4.5], [2.0, 2.5], [2.5, 3.0], [1.0, 2.0]], dtype=np.float32)
+y = np.array([0, 0, 1, 1, 1, 1, 1, 0, 0, 0], dtype=np.int64)
 
 # 1. 决策树实现
 class DecisionTree:
@@ -14,9 +13,9 @@ class DecisionTree:
 
     def entropy(self, labels):
         # 计算熵: -Σ(p * log2(p))
-        _, counts = torch.unique(labels, return_counts=True)
+        _, counts = np.unique(labels, return_counts=True)
         probs = counts / len(labels)
-        return -torch.sum(probs * torch.log2(probs))
+        return -np.sum(probs * np.log2(probs + 1e-10))
 
     def information_gain(self, X, y, feature_idx, threshold):
         # 计算信息增益
@@ -24,12 +23,12 @@ class DecisionTree:
         left_mask = X[:, feature_idx] <= threshold
         right_mask = ~left_mask
 
-        if torch.sum(left_mask) == 0 or torch.sum(right_mask) == 0:
+        if np.sum(left_mask) == 0 or np.sum(right_mask) == 0:
             return 0.0
 
         left_entropy = self.entropy(y[left_mask])
         right_entropy = self.entropy(y[right_mask])
-        n_left, n_right = torch.sum(left_mask), torch.sum(right_mask)
+        n_left, n_right = np.sum(left_mask), np.sum(right_mask)
         child_entropy = (n_left / len(y)) * left_entropy + (n_right / len(y)) * right_entropy
         return parent_entropy - child_entropy
 
@@ -41,7 +40,7 @@ class DecisionTree:
         n_features = X.shape[1]
 
         for feature_idx in range(n_features):
-            thresholds = torch.unique(X[:, feature_idx])
+            thresholds = np.unique(X[:, feature_idx])
             for threshold in thresholds:
                 gain = self.information_gain(X, y, feature_idx, threshold)
                 if gain > best_gain:
@@ -51,14 +50,19 @@ class DecisionTree:
 
         return best_feature, best_threshold, best_gain
 
+    def _mode(self, y):
+        # 获取众数
+        values, counts = np.unique(y, return_counts=True)
+        return values[np.argmax(counts)]
+
     def fit(self, X, y, depth=0):
         # 递归构建决策树
-        if depth >= self.max_depth or len(torch.unique(y)) == 1:
-            return {'leaf': True, 'class': torch.mode(y)[0].item()}
+        if depth >= self.max_depth or len(np.unique(y)) == 1:
+            return {'leaf': True, 'class': self._mode(y)}
 
         feature_idx, threshold, gain = self.find_best_split(X, y)
         if feature_idx is None or gain == 0:
-            return {'leaf': True, 'class': torch.mode(y)[0].item()}
+            return {'leaf': True, 'class': self._mode(y)}
 
         left_mask = X[:, feature_idx] <= threshold
         right_mask = ~left_mask
@@ -81,7 +85,7 @@ class DecisionTree:
 
     def predict(self, X):
         # 预测多个样本
-        return torch.tensor([self.predict_single(x, self.tree) for x in X], dtype=torch.long)
+        return np.array([self.predict_single(x, self.tree) for x in X], dtype=np.int64)
 
 # 示例用法
 if __name__ == "__main__":
@@ -90,10 +94,10 @@ if __name__ == "__main__":
     dt.tree = dt.fit(X, y)
     dt_predictions = dt.predict(X)
     print("Decision Tree Predictions:", dt_predictions)
-    print("Decision Tree Accuracy:", torch.mean((dt_predictions == y).float()).item())
+    print("Decision Tree Accuracy:", np.mean(dt_predictions == y))
 
     # 测试一个新样本
-    test_sample = torch.tensor([[2.0, 3.0]], dtype=torch.float32)
+    test_sample = np.array([[2.0, 3.0]], dtype=np.float32)
     dt_test_pred = dt.predict_single(test_sample[0], dt.tree)
     print(f"\nTest sample {test_sample.tolist()}:")
     print(f"Decision Tree Prediction: {dt_test_pred}")
